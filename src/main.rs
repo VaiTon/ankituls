@@ -26,7 +26,7 @@ fn import_file(path: String) -> Result<(), Box<dyn Error>> {
 
     let path = PathBuf::from(&path);
 
-    let file = if path.is_file() {
+    let file_path = if (&path).is_file() {
         path
     } else {
         let read_dir = fs::read_dir(path.clone()).or(Err(format!(
@@ -71,24 +71,30 @@ fn import_file(path: String) -> Result<(), Box<dyn Error>> {
         files[file].path()
     };
 
-    if !PathBuf::from(&file).is_file() {
-        return Err(format!("{} is not a file", file.display()).to_owned())?;
+    if !file_path.is_file() {
+        return Err(format!("{} is not a file", file_path.display()).to_owned())?;
     }
 
-    let path = file.to_str().unwrap().to_owned();
+    let canonical_path = fs::canonicalize(file_path.clone())?;
+    let canonical_path_str = canonical_path.to_str().unwrap();
 
     let response: AnkiResponse<bool> = client.request(&AnkiRequest {
         action: "importPackage".to_string(),
         version: 6,
-        params: Some(ImportPackageParams { path: path.clone() }),
+        params: Some(ImportPackageParams {
+            path: canonical_path_str.to_owned(),
+        }),
     })?;
 
     match response.result {
         Some(true) => {
-            println!("Imported {}", path.green());
+            println!("{} {}", "Imported".green(), file_path.display());
             Ok(())
         }
-        Some(false) | None => Err("could not import file".to_owned())?,
+        Some(false) | None => Err(format!(
+            "could not import file: {}",
+            response.error.unwrap_or("unknown error".to_string())
+        ))?,
     }
 }
 
@@ -99,21 +105,20 @@ fn export_file(dir: Option<String>, deck_name: Option<String>) -> Result<(), Box
 
     let dir = match dir {
         Some(dir) => PathBuf::from(dir),
-        None => {
-            let home =
-                home::home_dir().ok_or("Could not find home directory. Specify a directory.")?;
-            home.join(".anki")
-        }
+        None => home::home_dir()
+            .ok_or("Could not find home directory. Specify a directory.")?
+            .join(".anki"),
     };
+
     if !dir.is_dir() {
         return Err(format!("{} is not a directory", dir.display()).to_owned())?;
     }
 
-    let deck = match deck_name {
+    let deck_name = match deck_name {
         Some(deck) => deck,
         None => {
             let res: AnkiResponse<HashMap<String, u64>> = client.request(&AnkiRequest::<()> {
-                action: "deckNamesAndIds".to_string(),
+                action: "deckNamesAndIds".to_owned(),
                 version: 6,
                 params: None,
             })?;
@@ -139,11 +144,11 @@ fn export_file(dir: Option<String>, deck_name: Option<String>) -> Result<(), Box
         }
     };
 
-    let file_name = dir.join(&deck).with_extension("apkg");
+    let export_file_path = dir.join(&deck_name).with_extension("apkg");
 
     let params = ExportPackageParams {
-        deck_name: deck,
-        path: file_name.to_str().unwrap().to_owned(),
+        deck_name,
+        path: export_file_path.to_str().expect("invalid path").to_owned(),
         include_scheduling: false,
     };
 
@@ -154,7 +159,10 @@ fn export_file(dir: Option<String>, deck_name: Option<String>) -> Result<(), Box
     })?;
 
     match response.result {
-        Some(true) => Ok(()),
+        Some(true) => {
+            println!("{} {}", "Exported".green(), export_file_path.display());
+            Ok(())
+        }
         Some(false) => Err(response.error.unwrap_or("Unknown".to_string()))?,
         None => Err("no result")?,
     }
