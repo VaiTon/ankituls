@@ -1,18 +1,31 @@
-mod ankiconnect;
+use std::{
+    collections::HashMap,
+    error::Error,
+    ffi::OsString,
+    fs::{self, DirEntry},
+    path::{Path, PathBuf},
+    process::exit,
+};
 
-use std::{collections::HashMap, error::Error, ffi::OsString, fs, path::PathBuf, process::exit};
-
-use ankiconnect::{AnkiRequest, AnkiResponse, ExportPackageParams, ImportPackageParams};
-use clap::{Parser, Subcommand};
+use ankiconnect::*;
+use clap::{Parser, Subcommand, ValueEnum};
 use dialoguer::{theme::ColorfulTheme, Select};
 use owo_colors::OwoColorize;
+
+use crate::export::Export;
+
+mod export;
 
 fn main() {
     let args = Args::parse();
 
     let result = match args.cmd {
-        Command::Import { path: file } => import_file(file),
-        Command::Export { dir: file, deck } => export_file(file, deck),
+        Command::Import { path, format } => import_file(path, format),
+        Command::Export {
+            dir: file,
+            deck,
+            format,
+        } => export_file(file, deck, format),
     };
 
     if let Err(e) = result {
@@ -21,12 +34,12 @@ fn main() {
     }
 }
 
-fn import_file(path: String) -> Result<(), Box<dyn Error>> {
-    let client = ankiconnect::AnkiClient::new();
+fn import_file(path: String, format: Format) -> Result<(), Box<dyn Error>> {
+    let client = AnkiClient::new();
 
     let path = PathBuf::from(&path);
 
-    let file_path = if (&path).is_file() {
+    let file_path = if path.is_file() {
         path
     } else {
         let read_dir = fs::read_dir(path.clone()).or(Err(format!(
@@ -41,7 +54,14 @@ fn import_file(path: String) -> Result<(), Box<dyn Error>> {
                 let file_name = f.file_name().into_string();
 
                 let is_file = file_type.map(|t| t.is_file()).unwrap_or(false);
-                let is_ext = file_name.map(|n| n.ends_with(".apkg")).unwrap_or(false);
+                let is_ext = file_name
+                    .map(|n| {
+                        n.ends_with(match format {
+                            Format::Apkg => ".apkg",
+                            Format::Toml => ".toml",
+                        })
+                    })
+                    .unwrap_or(false);
 
                 is_file && is_ext
             })
@@ -55,9 +75,9 @@ fn import_file(path: String) -> Result<(), Box<dyn Error>> {
 
         let file_names = files
             .iter()
-            .map(fs::DirEntry::file_name)
+            .map(DirEntry::file_name)
             .map(OsString::into_string)
-            .map(Result::unwrap)
+            .filter_map(Result::ok)
             .collect::<Vec<_>>();
 
         let file = Select::with_theme(&ColorfulTheme::default())
@@ -72,36 +92,96 @@ fn import_file(path: String) -> Result<(), Box<dyn Error>> {
     };
 
     if !file_path.is_file() {
-        return Err(format!("{} is not a file", file_path.display()).to_owned())?;
+        return Err(format!("{} is not a file", file_path.display()))?;
     }
 
     let canonical_path = fs::canonicalize(file_path.clone())?;
-    let canonical_path_str = canonical_path.to_str().unwrap();
+    let canonical_path_str = canonical_path.to_str().ok_or("invalid path")?;
 
-    let response: AnkiResponse<bool> = client.request(&AnkiRequest {
-        action: "importPackage".to_string(),
-        version: 6,
-        params: Some(ImportPackageParams {
-            path: canonical_path_str.to_owned(),
-        }),
-    })?;
+    match format {
+        Format::Toml => import_toml(&client, &file_path),
+        Format::Apkg => import_apkg(&client, &file_path, &canonical_path_str),
+    }
+}
+
+fn import_toml(client: &AnkiClient, file_path: &PathBuf) -> Result<(), Box<dyn Error>> {
+    let notes = fs::read_to_string(file_path.clone())?;
+    let export: Export = toml::from_str(&notes)?;
+
+    println!(
+        "{} {} as {}",
+        "Importing".green(),
+        file_path.display(),
+        &export.deck_name
+    );
+
+    let notes: Vec<CreateNote> = export
+        .cards
+        .into_iter()
+        .map(|info| {
+            let fields_values = info
+                .fields
+                .into_iter()
+                .map(|(key, value)| (key, value.value))
+                .collect::<HashMap<String, String>>();
+
+            let options = CreateNoteOptions {
+                allow_duplicate: true,
+                duplicate_scope: "deck".to_string(),
+            };
+
+            CreateNote {
+                deck_name: export.deck_name.clone(),
+                model_name: info.model_name,
+                fields: fields_values,
+                tags: info.tags,
+                options: Some(options),
+            }
+        })
+        .collect();
+
+    let notes_len = notes.len();
+
+    let response: AnkiResponse<AddNotesResponse> = client.request(AddNotesRequest { notes })?;
 
     match response.result {
-        Some(true) => {
-            println!("{} {}", "Imported".green(), file_path.display());
+        Some(AddNotesResponse(imported_notes)) => {
+            let imports_ok = imported_notes.iter().filter_map(|n| n.as_ref()).count();
+
+            println!("{} {}/{} notes", "Imported".green(), imports_ok, notes_len);
+
             Ok(())
         }
-        Some(false) | None => Err(format!(
+        None => Err(format!(
             "could not import file: {}",
             response.error.unwrap_or("unknown error".to_string())
         ))?,
     }
 }
 
+fn import_apkg(
+    client: &AnkiClient,
+    file_path: &Path,
+    canonical_path_str: &str,
+) -> Result<(), Box<dyn Error>> {
+    match client.request(ImportPackageRequest {
+        path: canonical_path_str.to_owned(),
+    })? {
+        ImportPackageResponse(true) => Ok(()),
+        ImportPackageResponse(false) => {
+            Err(format!("could not import file: {}", file_path.display()))?
+        }
+    }
+}
+
 /// Export a deck to a file
 /// * `dir` - The directory to export to
-fn export_file(dir: Option<String>, deck_name: Option<String>) -> Result<(), Box<dyn Error>> {
-    let client = ankiconnect::AnkiClient::new();
+fn export_file(
+    dir: Option<String>,
+    deck_name: Option<String>,
+    format: Format,
+) -> Result<(), Box<dyn Error>> {
+    let client = AnkiClient::new();
 
     let dir = match dir {
         Some(dir) => PathBuf::from(dir),
@@ -111,21 +191,15 @@ fn export_file(dir: Option<String>, deck_name: Option<String>) -> Result<(), Box
     };
 
     if !dir.is_dir() {
-        return Err(format!("{} is not a directory", dir.display()).to_owned())?;
+        return Err(format!("{} is not a directory", dir.display()))?;
     }
 
     let deck_name = match deck_name {
         Some(deck) => deck,
         None => {
-            let res: AnkiResponse<HashMap<String, u64>> = client.request(&AnkiRequest::<()> {
-                action: "deckNamesAndIds".to_owned(),
-                version: 6,
-                params: None,
-            })?;
+            let res = client.request(DeckNamesRequest)?;
 
-            let res = res.result.ok_or("Could not get decks")?;
-
-            let mut deck_names = res.keys().collect::<Vec<&String>>();
+            let DeckNamesResponse(mut deck_names) = res;
             if deck_names.is_empty() {
                 return Err("No decks found".to_owned())?;
             }
@@ -137,34 +211,68 @@ fn export_file(dir: Option<String>, deck_name: Option<String>) -> Result<(), Box
                 .default(0)
                 .with_prompt("Select a deck")
                 .report(false)
-                .interact()
-                .unwrap();
+                .interact()?;
 
             deck_names[selection].to_owned()
         }
     };
 
-    let export_file_path = dir.join(&deck_name).with_extension("apkg");
+    println!("{} deck '{}'...", "Exporting".green(), deck_name);
 
-    let params = ExportPackageParams {
-        deck_name,
-        path: export_file_path.to_str().expect("invalid path").to_owned(),
-        include_scheduling: false,
-    };
+    let export_file_path = dir.join(&deck_name);
 
-    let response: AnkiResponse<bool> = client.request(&AnkiRequest {
-        action: "exportPackage".to_string(),
-        version: 6,
-        params: Some(params),
+    match format {
+        Format::Apkg => export_anki2(&client, &deck_name, &export_file_path),
+        Format::Toml => export_toml(&client, &deck_name, &export_file_path),
+    }
+}
+fn export_toml(
+    client: &AnkiClient,
+    deck_name: &String,
+    export_file_path: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let FindNotesResponse(ids) = client.request(FindNotesRequest {
+        query: format!("\"deck:{}\"", deck_name),
     })?;
 
-    match response.result {
-        Some(true) => {
-            println!("{} {}", "Exported".green(), export_file_path.display());
+    println!("{} {} cards...", "Exporting".green(), ids.len());
+
+    let NotesInfoResponse(mut cards) = client.request(NotesInfoRequest { notes: ids })?;
+
+    let export_file_path = export_file_path.with_extension("toml");
+
+    // Sort by card id, so that for version control systems, the diff is easier to read
+    cards.sort_by_cached_key(|c| c.note_id);
+
+    let export = export::Export {
+        deck_name: deck_name.to_owned(),
+        cards,
+    };
+    fs::write(export_file_path.clone(), toml::to_string(&export)?)?;
+
+    println!("{} to '{}'", "Exported".green(), export_file_path.display());
+    Ok(())
+}
+
+fn export_anki2(
+    client: &AnkiClient,
+    deck_name: &str,
+    export_file_path: &Path,
+) -> Result<(), Box<dyn Error>> {
+    match client.request(ExportPackageRequest {
+        deck: deck_name.to_string(),
+        include_scheduling: false,
+        path: export_file_path
+            .with_extension("apkg")
+            .to_str()
+            .expect("invalid path")
+            .to_owned(),
+    })? {
+        Some(ExportPackageResponse(true)) => {
+            println!("{} to '{}'", "Exported".green(), export_file_path.display());
             Ok(())
         }
-        Some(false) => Err(response.error.unwrap_or("Unknown".to_string()))?,
-        None => Err("no result")?,
+        Some(ExportPackageResponse(false)) | None => Err("could not export file")?,
     }
 }
 
@@ -182,14 +290,29 @@ enum Command {
         /// The path from which to import.
         /// If the path refers to a directory, a list of files from which to choose will be shown.
         path: String,
+
+        #[arg(short, long, default_value = "apkg")]
+        format: Format,
     },
     /// Export a deck to a file
     Export {
         /// The dir in which to export
-        /// Defaults to ~/.anki (or C:\Users\<user>\.anki on Windows
+        /// Defaults to ~/.anki (or C:\Users\<user>\.anki on Windows)
         dir: Option<String>,
         /// The deck to export.
         /// If not specified, a list of decks from which to choose will be shown.
         deck: Option<String>,
+
+        #[arg(short, long, default_value = "apkg")]
+        format: Format,
     },
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum Format {
+    /// Anki package
+    Apkg,
+
+    /// TOML representation of the deck, for collaboration and consumption by other tools
+    Toml,
 }
