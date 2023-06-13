@@ -5,10 +5,12 @@ It is written in Rust and uses the [AnkiConnect](https://github.com/FooSoft/anki
 
 It can be used to import / export decks from / to Anki:
 
-- [x] Export decks to TOML (recommended for git versioning)
-- [x] Import decks from TOML (recommended for git versioning)
-- [x] Export decks to APKG
-- [x] Import decks from APKG
+| Format | Import | Export | Notes |
+| ------ | ------ | ------ | ----- |
+| APKG   | ✔️ | ✔️ | Native file type. You can also use the Anki GUI. |
+| TOML   | ✔️ | ✔️ | Recommended for git versioning. |
+| JSON   | |  | TODO |
+
 
 > **Note:** Ankitu is still in development and not all features are implemented yet.
 
