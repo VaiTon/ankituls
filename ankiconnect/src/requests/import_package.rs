@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::AnkiRequest;
+use crate::AnkiRequest;
 
 #[derive(Debug, Serialize)]
 pub struct ImportPackageRequest {

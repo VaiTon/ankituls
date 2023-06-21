@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::AnkiRequest;
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateNote {
     #[serde(rename = "deckName")]
@@ -13,8 +15,6 @@ pub struct CreateNote {
     pub fields: HashMap<String, String>,
     pub tags: Vec<String>,
 }
-
-
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateNoteOptions {
@@ -32,9 +32,9 @@ pub struct AddNotesRequest {
 #[derive(Debug, Deserialize)]
 pub struct AddNotesResponse(pub Vec<Option<Value>>);
 
-impl From<AddNotesRequest> for super::AnkiRequest<AddNotesRequest> {
+impl From<AddNotesRequest> for AnkiRequest<AddNotesRequest> {
     fn from(value: AddNotesRequest) -> Self {
-        super::AnkiRequest {
+        AnkiRequest {
             action: "addNotes",
             version: 6,
             params: Some(value),

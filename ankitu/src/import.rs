@@ -1,8 +1,10 @@
 use std::{error::Error, fs, path::Path};
 
 use ankiconnect::{
-    AddNotesRequest, AddNotesResponse, AnkiClient, AnkiResponse, CreateNote, ImportPackageRequest,
-    ImportPackageResponse,
+    requests::{
+        AddNotesRequest, AddNotesResponse, CreateNote, ImportPackageRequest, ImportPackageResponse,
+    },
+    AnkiClient, AnkiResponse,
 };
 
 use crate::Export;

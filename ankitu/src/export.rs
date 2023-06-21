@@ -1,17 +1,28 @@
 use std::{error::Error, fs, path::Path};
 
 use ankiconnect::{
-    AnkiClient, ExportPackageRequest, ExportPackageResponse, FindNotesRequest, FindNotesResponse,
-    NotesInfoRequest, NotesInfoResponse,
+    requests::{
+        ExportPackageRequest, ExportPackageResponse, FindNotesRequest, FindNotesResponse,
+        NotesInfoRequest, NotesInfoResponse,
+    },
+    AnkiClient,
 };
 
-use crate::Export;
+use crate::{Export, ExportFormat};
 
-pub fn export_apkg(
+pub fn export_format(
+    format: ExportFormat,
     client: &AnkiClient,
     deck_name: &str,
-    path: &Path,
+    export_file_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
+    match format {
+        ExportFormat::Toml => export_toml(client, deck_name, export_file_path),
+        ExportFormat::Apkg => export_apkg(client, deck_name, export_file_path),
+    }
+}
+
+fn export_apkg(client: &AnkiClient, deck_name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
     let path = path.to_str().ok_or("invalid path")?.to_owned();
 
     let response = client.request(ExportPackageRequest {
@@ -26,11 +37,7 @@ pub fn export_apkg(
     }
 }
 
-pub fn export_toml(
-    client: &AnkiClient,
-    deck_name: &str,
-    path: &Path,
-) -> Result<(), Box<dyn Error>> {
+fn export_toml(client: &AnkiClient, deck_name: &str, path: &Path) -> Result<(), Box<dyn Error>> {
     let FindNotesResponse(ids) = client.request(FindNotesRequest {
         query: format!("\"deck:{}\"", deck_name),
     })?;

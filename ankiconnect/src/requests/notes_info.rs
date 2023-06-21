@@ -1,4 +1,4 @@
-use super::{note::NoteInfo, AnkiRequest};
+use crate::{note::NoteInfo, AnkiRequest};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]

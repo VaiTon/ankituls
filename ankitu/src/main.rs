@@ -1,16 +1,19 @@
 use std::{
-    collections::HashMap,
     error::Error,
-    fs::{self},
+    fs,
     path::{Path, PathBuf},
     process::exit,
 };
 
-use ankiconnect::*;
-use ankitu::{export_apkg, export_toml, import_apkg, import_toml, Export, Format, ImportResult};
+use ankiconnect::{
+    requests::{DeckNamesRequest, DeckNamesResponse},
+    *,
+};
 use clap::{Parser, Subcommand, ValueEnum};
 use dialoguer::{theme::ColorfulTheme, Select};
 use owo_colors::OwoColorize;
+
+use ankitu::{export_format, import_apkg, import_toml, Export, ExportFormat, ImportResult};
 
 mod export;
 
@@ -38,7 +41,7 @@ enum Command {
         deck: Option<String>,
 
         #[arg(short, long, default_value = "apkg")]
-        format: Format,
+        format: ExportFormat,
     },
     /// Import and export a deck to a file, effectively syncing it
     Sync {
@@ -53,7 +56,7 @@ enum Command {
         all: bool,
 
         #[arg(short, long, default_value = "apkg")]
-        format: Format,
+        format: ExportFormat,
     },
 }
 fn main() {
@@ -69,23 +72,23 @@ fn main() {
                 import_from_dir(&path)
             }
         }
-        Command::Export {
-            dir: file,
-            deck,
-            format,
-        } => export_file(file, deck, format).map(|_| ()),
+        Command::Export { dir, deck, format } => {
+            let dir = to_dir_or_default(dir).expect("failed to get dir");
+            export_file(&dir, deck, format).map(|_| ())
+        }
         Command::Sync {
             dir,
             deck,
             format,
-            all: false,
-        } => sync_one_deck(dir, deck, format),
-        Command::Sync {
-            dir,
-            deck: _,
-            format,
-            all: true,
-        } => sync_all_decks(dir, format),
+            all,
+        } => {
+            let dir = to_dir_or_default(dir).expect("failed to get dir");
+            if all {
+                sync_all_decks(&dir, format)
+            } else {
+                sync_one_deck(&dir, deck, format)
+            }
+        }
     };
 
     if let Err(e) = result {
@@ -97,7 +100,7 @@ fn main() {
 fn import_from_dir(path: &PathBuf) -> Result<(), Box<dyn Error>> {
     let dir = fs::read_dir(path)?;
 
-    let allowed_extensions: Vec<_> = Format::value_variants()
+    let allowed_extensions: Vec<_> = ExportFormat::value_variants()
         .iter()
         .map(|f| f.to_string())
         .collect();
@@ -132,9 +135,9 @@ fn import_from_dir(path: &PathBuf) -> Result<(), Box<dyn Error>> {
 }
 
 fn sync_one_deck(
-    dir: Option<String>,
+    dir: &Path,
     deck_name: Option<String>,
-    format: Format,
+    format: ExportFormat,
 ) -> Result<(), Box<dyn Error>> {
     let client = AnkiClient::new();
 
@@ -144,45 +147,50 @@ fn sync_one_deck(
     };
 
     println!("{} {}", "Syncing".green(), &deck_name);
-    let dir = export_dir_or_default(dir)?;
 
-    sync_impl(deck_name, &dir, format, &client)
+    {
+        let dir: &Path = &dir;
+        let client = &client;
+        let path = dir
+            .join(deck_name.clone())
+            .with_extension(format.to_string());
+
+        sync_file(&path, format, client, &deck_name)
+    }
 }
 
-fn sync_all_decks(dir: Option<String>, format: Format) -> Result<(), Box<dyn Error>> {
+fn sync_all_decks(dir: &Path, format: ExportFormat) -> Result<(), Box<dyn Error>> {
     let client = AnkiClient::new();
 
+    // Get all deck names from Anki
     let DeckNamesResponse(deck_names) = client.request(DeckNamesRequest)?;
 
-    println!("{} all decks", "Syncing".green());
+    println!("{} {} decks", "Syncing".green(), deck_names.len());
 
-    let dir = export_dir_or_default(dir)?;
+    let extension = format.to_string();
 
     for deck_name in deck_names {
-        sync_impl(deck_name, &dir, format, &client)?;
+        let file_path = dir.join(&deck_name).with_extension(&extension);
+        sync_file(&file_path, format, &client, &deck_name)?;
     }
 
     Ok(())
 }
 
-fn sync_impl(
-    deck_name: String,
-    dir: &Path,
-    format: Format,
+fn sync_file(
+    path: &Path,
+    format: ExportFormat,
     client: &AnkiClient,
+    deck_name: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let path = dir
-        .join(deck_name.clone())
-        .with_extension(format.to_string());
-
     // import first to ensure we don't overwrite any changes
-    if path.is_file() {
-        import_file(&path)?;
+    if path.exists() {
+        import_file(path)?;
     }
 
     // export after to ensure we have the latest changes
-    export_format(format, client, &deck_name, &path)?;
-    println!("{} {}", "Synced".green(), &deck_name);
+    export_format(format, client, deck_name, path)?;
+    println!("{} {}", "Synced".green(), deck_name);
     Ok(())
 }
 
@@ -191,8 +199,8 @@ fn import_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
 
     let canonical_path = fs::canonicalize(file_path)?;
     let format = match file_path.extension() {
-        Some(ext) if ext == "toml" => Format::Toml,
-        Some(ext) if ext == "apkg" => Format::Apkg,
+        Some(ext) if ext == "toml" => ExportFormat::Toml,
+        Some(ext) if ext == "apkg" => ExportFormat::Apkg,
         _ => Err(format!(
             "file extension not supported: {}",
             file_path.display()
@@ -200,8 +208,8 @@ fn import_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     };
 
     let result = match format {
-        Format::Toml => Some(import_toml(&client, &canonical_path)?),
-        Format::Apkg => {
+        ExportFormat::Toml => Some(import_toml(&client, &canonical_path)?),
+        ExportFormat::Apkg => {
             import_apkg(&client, &canonical_path)?;
             None
         }
@@ -228,21 +236,20 @@ fn import_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
 /// Export a deck to a file
 /// * `dir` - The directory to export to
 fn export_file(
-    dir: Option<String>,
+    dir: &Path,
     deck_name: Option<String>,
-    format: Format,
+    format: ExportFormat,
 ) -> Result<PathBuf, Box<dyn Error>> {
     let client = AnkiClient::new();
-
-    let dir = export_dir_or_default(dir)?;
 
     let deck_name = match deck_name {
         Some(deck) => deck,
         None => select_deck_name_from_anki(&client)?,
     };
 
-    println!("{} deck '{}'...", "Exporting".green(), deck_name);
     let export_file_path = dir.join(&deck_name);
+
+    println!("{} deck '{}'...", "Exporting".green(), deck_name);
 
     export_format(format, &client, &deck_name, &export_file_path)?;
 
@@ -250,29 +257,16 @@ fn export_file(
     Ok(export_file_path)
 }
 
-fn export_dir_or_default(dir: Option<String>) -> Result<PathBuf, Box<dyn Error>> {
-    // TODO: collapse with dir.join
-    let dir = match dir {
-        Some(dir) => PathBuf::from(dir),
+fn to_dir_or_default(dir: Option<String>) -> Result<PathBuf, Box<dyn Error>> {
+    match dir {
         None => home::home_dir()
-            .ok_or("Could not find home directory. Specify a directory.")?
-            .join(".anki"),
-    };
-    if !dir.is_dir() {
-        return Err(format!("{} is not a directory", dir.display()))?;
-    }
-    Ok(dir)
-}
+            .ok_or(Err("Could not find home directory. Specify a directory.")?)
+            .map(|p| p.join(".anki")),
 
-fn export_format(
-    format: Format,
-    client: &AnkiClient,
-    deck_name: &str,
-    export_file_path: &Path,
-) -> Result<(), Box<dyn Error>> {
-    match format {
-        Format::Toml => export_toml(client, deck_name, export_file_path),
-        Format::Apkg => export_apkg(client, deck_name, export_file_path),
+        Some(dir) => match PathBuf::from(dir) {
+            p if p.is_dir() => Ok(p),
+            p => Err(format!("{} is not a directory", p.display()))?,
+        },
     }
 }
 
@@ -281,7 +275,7 @@ fn select_deck_name_from_anki(client: &AnkiClient) -> Result<String, Box<dyn Err
     let DeckNamesResponse(mut deck_names) = res;
 
     if deck_names.is_empty() {
-        return Err("No decks found".to_owned())?;
+        return Err("No decks found")?;
     }
 
     deck_names.sort();

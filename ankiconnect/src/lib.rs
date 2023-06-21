@@ -2,20 +2,10 @@ use std::{error::Error, fmt::Debug};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-pub mod add_notes;
-pub use add_notes::*;
-pub mod deck_names_and_ids;
-pub use deck_names_and_ids::*;
-pub mod export_package;
-pub use export_package::*;
-pub mod find_notes;
-pub use find_notes::*;
-pub mod import_package;
-pub use import_package::*;
+pub mod requests;
+
 pub mod note;
 pub use note::*;
-pub mod notes_info;
-pub use notes_info::*;
 
 #[derive(Debug, Deserialize)]
 pub struct AnkiResponse<T> {
