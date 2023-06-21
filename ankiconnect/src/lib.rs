@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, fmt::Debug};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -19,8 +19,8 @@ pub use notes_info::*;
 
 #[derive(Debug, Deserialize)]
 pub struct AnkiResponse<T> {
-    pub error: Option<String>,
     pub result: Option<T>,
+    pub error: Option<String>,
 }
 
 impl<T> From<AnkiResponse<T>> for Result<T, String> {
@@ -63,15 +63,12 @@ impl AnkiClient {
         AnkiRequest<Request>: From<Request>,
         Request: Serialize,
         Response: DeserializeOwned,
+        Response: Debug,
     {
         let request = AnkiRequest::from(request);
 
-        let response = self
-            .client
-            .post(&self.url)
-            .json(&request)
-            .send()?
-            .json::<AnkiResponse<Response>>()?;
+        let response = self.client.post(&self.url).json(&request).send()?;
+        let response: AnkiResponse<Response> = response.json()?;
 
         Result::from(response).map_err(|error| error.into())
     }
