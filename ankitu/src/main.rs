@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     error::Error,
     fs::{self},
     path::{Path, PathBuf},
@@ -6,8 +7,8 @@ use std::{
 };
 
 use ankiconnect::*;
-use ankitu::{export_apkg, export_toml, import_apkg, Export, Format};
-use clap::{Parser, Subcommand};
+use ankitu::{export_apkg, export_toml, import_apkg, import_toml, Export, Format, ImportResult};
+use clap::{Parser, Subcommand, ValueEnum};
 use dialoguer::{theme::ColorfulTheme, Select};
 use owo_colors::OwoColorize;
 
@@ -62,10 +63,10 @@ fn main() {
         Command::Import { path } => {
             let path = PathBuf::from(&path);
 
-            if !path.is_file() {
-                Err("specified import path is not a file".into())
-            } else {
+            if path.is_file() {
                 import_file(&path)
+            } else {
+                import_from_dir(&path)
             }
         }
         Command::Export {
@@ -93,6 +94,43 @@ fn main() {
     }
 }
 
+fn import_from_dir(path: &PathBuf) -> Result<(), Box<dyn Error>> {
+    let dir = fs::read_dir(path)?;
+
+    let allowed_extensions: Vec<_> = Format::value_variants()
+        .iter()
+        .map(|f| f.to_string())
+        .collect();
+
+    let file_names: Vec<String> = dir
+        .filter_map(|p| {
+            let p = p.ok()?;
+            let name = p.file_name().to_str()?.to_owned();
+
+            let p_type = p.file_type().ok()?;
+            let extension = p.path().extension()?.to_os_string().into_string().ok()?;
+
+            if p_type.is_file() && allowed_extensions.contains(&extension) {
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("Select a file to import")
+        .default(0)
+        .items(&file_names)
+        .interact()?;
+
+    let file = &file_names[selection];
+
+    let file = path.join(file);
+
+    import_file(&file)
+}
+
 fn sync_one_deck(
     dir: Option<String>,
     deck_name: Option<String>,
@@ -102,7 +140,7 @@ fn sync_one_deck(
 
     let deck_name = match deck_name {
         Some(deck_name) => deck_name,
-        None => select_deck_name(&client)?,
+        None => select_deck_name_from_anki(&client)?,
     };
 
     println!("{} {}", "Syncing".green(), &deck_name);
@@ -161,39 +199,30 @@ fn import_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
         ))?,
     };
 
-    match format {
-        Format::Toml => import_toml(&client, &canonical_path),
-        Format::Apkg => import_apkg(&client, &canonical_path),
-    }?;
-
-    println!("{} {}", "Imported".green(), canonical_path.display());
-    Ok(())
-}
-
-fn import_toml(client: &AnkiClient, file_path: &Path) -> Result<(), Box<dyn Error>> {
-    let notes = fs::read_to_string(file_path)?;
-    let export: Export = toml::from_str(&notes)?;
-
-    println!("{} {}", "Importing".green(), file_path.display(),);
-
-    let notes: Vec<CreateNote> = export.into();
-    let notes_len = notes.len();
-
-    println!("{} {} notes", "Found".green(), notes_len);
-
-    let response: AnkiResponse<AddNotesResponse> = client.request(AddNotesRequest { notes })?;
-
-    match response.result {
-        Some(AddNotesResponse(imported_notes)) => {
-            let imports_ok = imported_notes.iter().filter_map(|n| n.as_ref()).count();
-            println!("{} {}/{} notes", "Imported".green(), imports_ok, notes_len);
-            Ok(())
+    let result = match format {
+        Format::Toml => Some(import_toml(&client, &canonical_path)?),
+        Format::Apkg => {
+            import_apkg(&client, &canonical_path)?;
+            None
         }
-        None => Err(format!(
-            "could not import file: {}",
-            response.error.unwrap_or("unknown error".to_string())
-        ))?,
+    };
+
+    match result {
+        Some(ImportResult {
+            imported_notes,
+            total_notes,
+        }) => {
+            println!(
+                "{} {} notes out of {} total notes",
+                "Imported".green(),
+                imported_notes,
+                total_notes
+            )
+        }
+        None => println!("{} {}", "Imported".green(), canonical_path.display()),
     }
+
+    Ok(())
 }
 
 /// Export a deck to a file
@@ -206,7 +235,11 @@ fn export_file(
     let client = AnkiClient::new();
 
     let dir = export_dir_or_default(dir)?;
-    let deck_name = select_deck_name_or_default(deck_name, &client)?;
+
+    let deck_name = match deck_name {
+        Some(deck) => deck,
+        None => select_deck_name_from_anki(&client)?,
+    };
 
     println!("{} deck '{}'...", "Exporting".green(), deck_name);
     let export_file_path = dir.join(&deck_name);
@@ -243,18 +276,7 @@ fn export_format(
     }
 }
 
-fn select_deck_name_or_default(
-    deck_name: Option<String>,
-    client: &AnkiClient,
-) -> Result<String, Box<dyn Error>> {
-    let deck_name = match deck_name {
-        Some(deck) => deck,
-        None => select_deck_name(client)?,
-    };
-    Ok(deck_name)
-}
-
-fn select_deck_name(client: &AnkiClient) -> Result<String, Box<dyn Error>> {
+fn select_deck_name_from_anki(client: &AnkiClient) -> Result<String, Box<dyn Error>> {
     let res = client.request(DeckNamesRequest)?;
     let DeckNamesResponse(mut deck_names) = res;
 
