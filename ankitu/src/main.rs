@@ -129,7 +129,7 @@ fn sync_all_decks(dir: Option<String>, format: Format) -> Result<(), Box<dyn Err
 
 fn sync_impl(
     deck_name: String,
-    dir: &PathBuf,
+    dir: &Path,
     format: Format,
     client: &AnkiClient,
 ) -> Result<(), Box<dyn Error>> {
@@ -151,7 +151,7 @@ fn sync_impl(
 fn import_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     let client = AnkiClient::new();
 
-    let canonical_path = fs::canonicalize(file_path.clone())?;
+    let canonical_path = fs::canonicalize(file_path)?;
     let format = match file_path.extension() {
         Some(ext) if ext == "toml" => Format::Toml,
         Some(ext) if ext == "apkg" => Format::Apkg,
@@ -162,7 +162,7 @@ fn import_file(file_path: &Path) -> Result<(), Box<dyn Error>> {
     };
 
     match format {
-        Format::Toml => import_toml(&client, &file_path),
+        Format::Toml => import_toml(&client, &canonical_path),
         Format::Apkg => import_apkg(&client, &canonical_path),
     }?;
 
@@ -235,11 +235,11 @@ fn export_format(
     format: Format,
     client: &AnkiClient,
     deck_name: &str,
-    export_file_path: &PathBuf,
+    export_file_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
     match format {
-        Format::Toml => export_toml(&client, deck_name, &export_file_path),
-        Format::Apkg => export_apkg(&client, deck_name, &export_file_path),
+        Format::Toml => export_toml(client, deck_name, export_file_path),
+        Format::Apkg => export_apkg(client, deck_name, export_file_path),
     }
 }
 

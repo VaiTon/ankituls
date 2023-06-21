@@ -44,6 +44,6 @@ pub fn export_toml(
         deck_name: deck_name.to_owned(),
         notes: cards,
     };
-    fs::write(&path, toml::to_string(&export)?)?;
+    fs::write(path, toml::to_string(&export)?)?;
     Ok(())
 }
