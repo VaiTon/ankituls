@@ -1,6 +1,6 @@
 [package]
 name = "ankiconnect"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A Rust library for interacting with AnkiConnect."
 license = "MIT"
@@ -10,6 +10,5 @@ authors = ["Eyad Issa <eyadlorenzo@gmail.com>"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.11.18", features = ["blocking", "json"] }
 serde = { version = "1.0.164", features = ["derive"] }
-serde_json = "1.0.97"
+ureq = { version = "2.7.1", features = ["json"] }

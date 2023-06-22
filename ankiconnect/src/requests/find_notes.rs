@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::AnkiRequest;
+use crate::{AnkiRequestable, NoteId};
 
 #[derive(Debug, Serialize)]
 pub struct FindNotesRequest {
@@ -8,14 +8,11 @@ pub struct FindNotesRequest {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct FindNotesResponse(pub Vec<u64>);
+pub struct FindNotesResponse(pub Vec<NoteId>);
 
-impl From<FindNotesRequest> for AnkiRequest<FindNotesRequest> {
-    fn from(value: FindNotesRequest) -> Self {
-        AnkiRequest {
-            action: "findNotes",
-            version: 6,
-            params: Some(value),
-        }
-    }
+impl AnkiRequestable for FindNotesRequest {
+    type Response = FindNotesResponse;
+
+    const ACTION: &'static str = "findNotes";
+    const VERSION: u16 = 6;
 }

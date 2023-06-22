@@ -1,21 +1,18 @@
-use crate::{note::NoteInfo, AnkiRequest};
+use crate::{note::NoteInfo, AnkiRequestable, NoteId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
 pub struct NotesInfoRequest {
-    pub notes: Vec<u64>,
+    pub notes: Vec<NoteId>,
 }
 
 #[derive(Debug, Deserialize)]
 
 pub struct NotesInfoResponse(pub Vec<NoteInfo>);
 
-impl From<NotesInfoRequest> for AnkiRequest<NotesInfoRequest> {
-    fn from(value: NotesInfoRequest) -> Self {
-        AnkiRequest {
-            action: "notesInfo",
-            version: 6,
-            params: Some(value),
-        }
-    }
+impl AnkiRequestable for NotesInfoRequest {
+    type Response = NotesInfoResponse;
+
+    const ACTION: &'static str = "notesInfo";
+    const VERSION: u16 = 6;
 }

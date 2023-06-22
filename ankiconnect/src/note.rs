@@ -2,10 +2,12 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::NoteId;
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct NoteInfo {
     #[serde(rename = "noteId")]
-    pub note_id: u64,
+    pub note_id: NoteId,
     pub tags: Vec<String>,
     pub fields: HashMap<String, NoteField>,
     #[serde(rename = "modelName")]

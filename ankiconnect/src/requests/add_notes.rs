@@ -1,28 +1,7 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-use crate::AnkiRequest;
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct CreateNote {
-    #[serde(rename = "deckName")]
-    pub deck_name: String,
-    #[serde(rename = "modelName")]
-    pub model_name: String,
-    pub options: Option<CreateNoteOptions>,
-    pub fields: HashMap<String, String>,
-    pub tags: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct CreateNoteOptions {
-    #[serde(rename = "allowDuplicate")]
-    pub allow_duplicate: bool,
-    #[serde(rename = "duplicateScope")]
-    pub duplicate_scope: String,
-}
+use super::CreateNote;
+use crate::{AnkiRequestable, NoteId};
 
 #[derive(Debug, Serialize)]
 pub struct AddNotesRequest {
@@ -30,14 +9,11 @@ pub struct AddNotesRequest {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct AddNotesResponse(pub Vec<Option<Value>>);
+pub struct AddNotesResponse(pub Vec<Option<NoteId>>);
 
-impl From<AddNotesRequest> for AnkiRequest<AddNotesRequest> {
-    fn from(value: AddNotesRequest) -> Self {
-        AnkiRequest {
-            action: "addNotes",
-            version: 6,
-            params: Some(value),
-        }
-    }
+impl AnkiRequestable for AddNotesRequest {
+    type Response = AddNotesResponse;
+
+    const ACTION: &'static str = "addNotes";
+    const VERSION: u16 = 6;
 }

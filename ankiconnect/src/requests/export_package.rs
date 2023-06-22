@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::AnkiRequest;
+use crate::{AnkiRequestable};
 
 #[derive(Debug, Serialize)]
 pub struct ExportPackageRequest {
@@ -12,12 +12,9 @@ pub struct ExportPackageRequest {
 #[derive(Debug, Deserialize)]
 pub struct ExportPackageResponse(pub bool);
 
-impl From<ExportPackageRequest> for AnkiRequest<ExportPackageRequest> {
-    fn from(value: ExportPackageRequest) -> Self {
-        AnkiRequest {
-            action: "exportPackage",
-            version: 6,
-            params: Some(value),
-        }
-    }
+impl AnkiRequestable for ExportPackageRequest {
+    type Response = ExportPackageResponse;
+
+    const ACTION: &'static str = "exportPackage";
+    const VERSION: u16 = 6;
 }
