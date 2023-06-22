@@ -20,11 +20,11 @@ where
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CardId(pub u64);
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NoteId(pub u64);
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DeckId(pub u64);
 
 #[derive(Debug, Deserialize)]
