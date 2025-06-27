@@ -1,4 +1,4 @@
-module ankituls
+module github.com/VaiTon/ankituls
 
 go 1.23.0
 
