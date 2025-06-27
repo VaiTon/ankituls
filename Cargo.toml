@@ -1,3 +1,0 @@
-[workspace]
-members = ["ankiconnect", "ankitu"]
-resolver = "2"

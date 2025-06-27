@@ -1,31 +1,27 @@
 name: Build and test
 on: [push, pull_request]
 
+env:
+  GO_VERSION: "1.24"
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions-rs/toolchain@v1
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
-          toolchain: stable
+          go-version: ${{ env.GO_VERSION }}
 
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - uses: actions/cache@v3
-        with:
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
+      - name: Build Go
+        run: go build -v ./...
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
+      - name: Test Go
+        run: go test -v ./...
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - name: Lint Go
+        run: go vet ./...
