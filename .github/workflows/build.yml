@@ -17,11 +17,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Build Go
+      - name: Build all packages
         run: go build -v ./...
+
+      - name: Build CLI application
+        run: go build -o ankituls ./cmd/ankituls
 
       - name: Test Go
         run: go test -v ./...
 
       - name: Lint Go
         run: go vet ./...
+
+      - name: Upload build artifact
+        if: github.event_name != 'pull_request'
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          path: ankituls
+
+      - uses: actions/attest-build-provenance@v2
+        if: github.event_name != 'pull_request'
+        with:
+          subject-name: ankituls
+          subject-digest: sha256:${{ steps.upload.outputs.artifact-digest }}
