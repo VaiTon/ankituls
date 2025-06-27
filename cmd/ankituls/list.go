@@ -1,7 +1,7 @@
 package main
 
 import (
-	"ankituls/internal/ankiconnect"
+	"github.com/VaiTon/ankituls/internal/ankiconnect"
 	"fmt"
 	"os"
 

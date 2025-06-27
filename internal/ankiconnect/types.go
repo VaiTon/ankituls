@@ -1,6 +1,6 @@
 package ankiconnect
 
-import "ankituls/internal/formats"
+import "github.com/VaiTon/ankituls/internal/formats"
 
 // Internal representation of AnkiConnect types
 

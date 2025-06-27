@@ -1,8 +1,8 @@
 package main
 
 import (
-	"ankituls/internal/ankiconnect"
-	"ankituls/internal/formats"
+	"github.com/VaiTon/ankituls/internal/ankiconnect"
+	"github.com/VaiTon/ankituls/internal/formats"
 	"fmt"
 	"os"
 	"strings"
