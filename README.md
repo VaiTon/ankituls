@@ -5,11 +5,11 @@ It is written in Rust and uses the [AnkiConnect](https://github.com/FooSoft/anki
 
 It can be used to import / export decks from / to Anki:
 
-| Format | Import  | Export  | Notes                                             |
-| ------ | ------- | ------- | ------------------------------------------------- |
-| TOML   | :check: | :check: | Recommended for git versioning. See schema below. |
-| JSON   |         |         | TODO                                              |
-| YAML   |         |         | TODO                                              |
+| Format | Import | Export | Notes                                                                 |
+| ------ | ------ | ------ | --------------------------------------------------------------------- |
+| TOML   | ✔️     | ✔️     | Recommended for git versioning. See schema below.                     |
+| JSON   | ✔️     | ✔️     | NOT recommended for git versioning.                                   |
+| YAML   | ✔️     | ✔️     | I don't really like using YAML for this purpose, but it is supported. |
 
 > **Note:** Ankitu is still in development and not all features are implemented yet.
 
