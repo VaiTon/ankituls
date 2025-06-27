@@ -14,7 +14,12 @@ func MarshalJSON(w io.Writer, e *Export) error {
 }
 
 // UnmarshalJSON reads JSON from the reader and decodes into Export.
+// It enforces deterministic order by calling sortForExport after decoding.
 func UnmarshalJSON(r io.Reader, e *Export) error {
 	dec := json.NewDecoder(r)
-	return dec.Decode(e)
+	if err := dec.Decode(e); err != nil {
+		return err
+	}
+	e.sortForExport()
+	return nil
 }

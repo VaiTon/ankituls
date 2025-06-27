@@ -25,6 +25,7 @@ type Export struct {
 	Version  int    `json:"version" toml:"version" yaml:"version"`
 	DeckName string `json:"deck_name" toml:"deck_name" yaml:"deck_name"`
 	Notes    []Note `json:"notes" toml:"notes" yaml:"notes"`
+	Models   []any  `json:"models" toml:"models" yaml:"models"`
 }
 
 // sortForExport sorts notes, tags, and fields for deterministic output.
@@ -50,11 +51,12 @@ func (e *Export) sortForExport() {
 }
 
 // ToExport constructs an Export struct from raw data.
-func ToExport(version int, deckName string, notes []Note) *Export {
+func ToExport(version int, deckName string, notes []Note, models []any) *Export {
 	return &Export{
 		Version:  version,
 		DeckName: deckName,
 		Notes:    notes,
+		Models:   models,
 	}
 }
 

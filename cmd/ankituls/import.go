@@ -11,8 +11,7 @@ import (
 )
 
 func importDeck(cmd *cobra.Command, args []string) {
-	var force bool
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite deck if it already exists")
+	force, _ := cmd.Flags().GetBool("force")
 
 	file := args[0]
 	format := ""

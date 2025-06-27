@@ -27,12 +27,14 @@ func main() {
 		Run:   listDecks,
 	}
 
+	var force bool
 	var importCmd = &cobra.Command{
 		Use:   "import [file]",
 		Short: "Import a deck from TOML",
 		Args:  cobra.ExactArgs(1),
 		Run:   importDeck,
 	}
+	importCmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite deck if it already exists")
 
 	rootCmd.AddCommand(exportCmd, importCmd, listCmd)
 	if err := rootCmd.Execute(); err != nil {

@@ -58,10 +58,31 @@ func exportDeck(cmd *cobra.Command, args []string) {
 	// Convert ankiconnect.NoteInfo to formats.Note using ankiconnect package function
 	notes := ankiconnect.ConvertNoteInfoSliceToNotes(notesInfo)
 
+	// Gather unique model names used by the notes
+	modelNameSet := make(map[string]struct{})
+	for _, n := range notesInfo {
+		modelNameSet[n.ModelName] = struct{}{}
+	}
+	modelNames := make([]string, 0, len(modelNameSet))
+	for name := range modelNameSet {
+		modelNames = append(modelNames, name)
+	}
+
+	// Fetch model definitions from AnkiConnect
+	var models []any
+	if len(modelNames) > 0 {
+		modelReq := map[string]any{"modelNames": modelNames}
+		if err := client.Request("findModelsByName", modelReq, 6, &models); err != nil {
+			color.Red("Failed to fetch model definitions: %v", err)
+			os.Exit(1)
+		}
+	}
+
 	export := formats.Export{
 		Version:  1,
 		DeckName: deck,
 		Notes:    notes,
+		Models:   models,
 	}
 
 	err := formats.MarshalToWriter(strings.ToLower(format), os.Stdout, &export)
